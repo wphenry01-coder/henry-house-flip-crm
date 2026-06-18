@@ -1,0 +1,1159 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, ChevronLeft, Trash2, Loader2, Check, AlertTriangle, Home, Lock, Camera, Upload, FileText } from 'lucide-react';
+
+const STORAGE_KEY = 'flip-deals-v2';
+
+/* ---------- framework reference data ---------- */
+
+const STEP_DEFS = [
+  { n: 1, title: 'Find the Right Property' },
+  { n: 2, title: 'Preliminary Deal Analysis' },
+  { n: 3, title: 'Inspect the Property' },
+  { n: 4, title: 'Build Repair Budget' },
+  { n: 5, title: 'Calculate Holding Costs' },
+  { n: 6, title: 'Determine ARV' },
+  { n: 7, title: 'Calculate Maximum Offer' },
+  { n: 8, title: 'Verify Profit' },
+  { n: 9, title: 'Secure Financing' },
+  { n: 10, title: 'Submit Offer & Get Under Contract' },
+  { n: 11, title: 'Renovation & Project Management' },
+  { n: 12, title: 'Prepare for Market' },
+  { n: 13, title: 'List Property' },
+  { n: 14, title: 'Sell Property' },
+  { n: 15, title: 'Post-Flip Review' },
+];
+
+const LOOK_FOR = [
+  { key: 'cosmeticFixer', label: 'Cosmetic fixer' },
+  { key: 'estateSale', label: 'Estate sale' },
+  { key: 'distressedSeller', label: 'Distressed seller' },
+  { key: 'vacantHome', label: 'Vacant home' },
+  { key: 'outdatedInteriors', label: 'Outdated interiors' },
+  { key: 'tiredLandlord', label: 'Tired landlord' },
+  { key: 'offMarket', label: 'Off-market deal' },
+  { key: 'onMarket30', label: 'On market 30+ days' },
+];
+
+const AVOID = [
+  { key: 'floodZone', label: 'Flood zone' },
+  { key: 'historicDistrict', label: 'Historic district' },
+  { key: 'busyRoad', label: 'Busy road' },
+  { key: 'highCrime', label: 'High-crime area' },
+  { key: 'foundationIssues', label: 'Severe foundation issues' },
+  { key: 'functionalObsolescence', label: 'Functional obsolescence' },
+  { key: 'luxuryHome', label: 'Luxury home (unless experienced)' },
+];
+
+const INSPECTION_GROUPS = [
+  { key: 'structure', label: 'Structure', items: [{ key: 'foundation', label: 'Foundation' }, { key: 'framing', label: 'Framing' }, { key: 'waterIntrusion', label: 'Water intrusion' }] },
+  { key: 'roof', label: 'Roof', items: [{ key: 'age', label: 'Age' }, { key: 'hailDamage', label: 'Hail damage' }, { key: 'missingShingles', label: 'Missing shingles' }, { key: 'flashing', label: 'Flashing' }, { key: 'gutters', label: 'Gutters' }, { key: 'decking', label: 'Decking' }] },
+  { key: 'exterior', label: 'Exterior', items: [{ key: 'siding', label: 'Siding' }, { key: 'paint', label: 'Paint' }, { key: 'windows', label: 'Windows' }, { key: 'doors', label: 'Doors' }] },
+  { key: 'hvac', label: 'HVAC', items: [{ key: 'furnace', label: 'Furnace' }, { key: 'ac', label: 'AC' }] },
+  { key: 'plumbing', label: 'Plumbing', items: [{ key: 'waterHeater', label: 'Water heater' }, { key: 'supplyLines', label: 'Supply lines' }, { key: 'sewerScope', label: 'Sewer scope' }] },
+  { key: 'electrical', label: 'Electrical', items: [{ key: 'panel', label: 'Panel' }, { key: 'wiring', label: 'Wiring' }, { key: 'capacity', label: 'Capacity' }] },
+  { key: 'interior', label: 'Interior', items: [{ key: 'kitchen', label: 'Kitchen' }, { key: 'bathrooms', label: 'Bathrooms' }, { key: 'flooring', label: 'Flooring' }, { key: 'trim', label: 'Trim' }, { key: 'paint', label: 'Paint' }] },
+];
+
+const OPTIONAL_INSPECTIONS = [
+  { key: 'homeInspection', label: 'Home inspection' },
+  { key: 'sewerScope', label: 'Sewer scope' },
+  { key: 'structuralEngineer', label: 'Structural engineer' },
+  { key: 'roofInspection', label: 'Roof inspection' },
+];
+
+const REPAIR_BUDGET_GROUPS = [
+  { key: 'exterior', label: 'Exterior', items: [{ key: 'roof', label: 'Roof' }, { key: 'gutters', label: 'Gutters' }, { key: 'siding', label: 'Siding' }, { key: 'windows', label: 'Windows' }, { key: 'paint', label: 'Paint' }, { key: 'landscaping', label: 'Landscaping' }] },
+  { key: 'kitchen', label: 'Kitchen', items: [{ key: 'cabinets', label: 'Cabinets' }, { key: 'counters', label: 'Counters' }, { key: 'appliances', label: 'Appliances' }, { key: 'sink', label: 'Sink' }, { key: 'faucet', label: 'Faucet' }, { key: 'backsplash', label: 'Backsplash' }] },
+  { key: 'bathrooms', label: 'Bathrooms', items: [{ key: 'vanities', label: 'Vanities' }, { key: 'toilets', label: 'Toilets' }, { key: 'showers', label: 'Showers' }, { key: 'tile', label: 'Tile' }, { key: 'fixtures', label: 'Fixtures' }] },
+  { key: 'interior', label: 'Interior', items: [{ key: 'paint', label: 'Paint' }, { key: 'flooring', label: 'Flooring' }, { key: 'trim', label: 'Trim' }, { key: 'doors', label: 'Doors' }, { key: 'lighting', label: 'Lighting' }] },
+  { key: 'mechanical', label: 'Mechanical', items: [{ key: 'hvac', label: 'HVAC' }, { key: 'plumbing', label: 'Plumbing' }, { key: 'electrical', label: 'Electrical' }, { key: 'waterHeater', label: 'Water heater' }] },
+  { key: 'misc', label: 'Miscellaneous', items: [{ key: 'dumpster', label: 'Dumpster' }, { key: 'permits', label: 'Permits' }, { key: 'cleaning', label: 'Cleaning' }, { key: 'staging', label: 'Staging' }] },
+];
+
+const HOLDING_ITEMS = [
+  { key: 'interest', label: 'Interest' },
+  { key: 'loanPoints', label: 'Loan points' },
+  { key: 'propertyTaxes', label: 'Property taxes' },
+  { key: 'insurance', label: 'Insurance' },
+  { key: 'utilities', label: 'Utilities' },
+  { key: 'hoa', label: 'HOA' },
+  { key: 'lawnCare', label: 'Lawn care' },
+  { key: 'snowRemoval', label: 'Snow removal' },
+];
+
+const SELLING_ITEMS = [
+  { key: 'agentCommission', label: 'Agent commission' },
+  { key: 'closingCostsSale', label: 'Closing costs' },
+  { key: 'concessions', label: 'Concessions' },
+];
+
+const ACQUISITION_ITEMS = [
+  { key: 'purchasePrice', label: 'Purchase price' },
+  { key: 'closingPurchase', label: 'Closing costs (buy)' },
+];
+
+const CONTRACT_CHECKLIST = [
+  { key: 'finalInspections', label: 'Final inspections' },
+  { key: 'contractorWalkthroughs', label: 'Contractor walkthroughs' },
+  { key: 'confirmRepairBudget', label: 'Confirm repair budget' },
+  { key: 'confirmARV', label: 'Confirm ARV' },
+  { key: 'verifyPermits', label: 'Verify permits' },
+  { key: 'verifyFinancing', label: 'Verify financing' },
+];
+
+const CONSTRUCTION_ORDER = [
+  { key: 'demo', label: '1. Demo' }, { key: 'structural', label: '2. Structural' }, { key: 'framing', label: '3. Framing' },
+  { key: 'roofing', label: '4. Roofing' }, { key: 'windows', label: '5. Windows' }, { key: 'hvac', label: '6. HVAC' },
+  { key: 'plumbing', label: '7. Plumbing' }, { key: 'electrical', label: '8. Electrical' }, { key: 'insulation', label: '9. Insulation' },
+  { key: 'drywall', label: '10. Drywall' }, { key: 'paint', label: '11. Paint' }, { key: 'cabinets', label: '12. Cabinets' },
+  { key: 'countertops', label: '13. Countertops' }, { key: 'flooring', label: '14. Flooring' }, { key: 'trim', label: '15. Trim' },
+  { key: 'fixtures', label: '16. Fixtures' }, { key: 'appliances', label: '17. Appliances' }, { key: 'punchList', label: '18. Punch list' },
+  { key: 'cleaning', label: '19. Cleaning' }, { key: 'staging', label: '20. Staging' },
+];
+
+const MARKET_PREP_CHECKLIST = [
+  { key: 'cleaning', label: 'Professional cleaning' },
+  { key: 'landscaping', label: 'Landscaping' },
+  { key: 'touchUps', label: 'Final touch-ups' },
+  { key: 'staging', label: 'Staging' },
+  { key: 'photos', label: 'Professional photos' },
+];
+
+const REVIEW_CHECKLIST = [
+  { key: 'arvAccuracy', label: 'ARV accuracy reviewed' },
+  { key: 'budgetAccuracy', label: 'Budget accuracy reviewed' },
+  { key: 'timelineAccuracy', label: 'Timeline accuracy reviewed' },
+  { key: 'contractorPerformance', label: 'Contractor performance reviewed' },
+];
+
+/* ---------- data helpers ---------- */
+
+function emptyItem() { return { est: 0, actual: 0 }; }
+
+function blankDeal() {
+  const repair = {};
+  REPAIR_BUDGET_GROUPS.forEach((g) => { repair[g.key] = {}; g.items.forEach((it) => { repair[g.key][it.key] = emptyItem(); }); });
+  const holding = {}; HOLDING_ITEMS.forEach((it) => { holding[it.key] = emptyItem(); });
+  const selling = {}; SELLING_ITEMS.forEach((it) => { selling[it.key] = emptyItem(); });
+  const acquisition = {}; ACQUISITION_ITEMS.forEach((it) => { acquisition[it.key] = emptyItem(); });
+
+  const lookFor = {}; LOOK_FOR.forEach((it) => { lookFor[it.key] = false; });
+  const avoid = {}; AVOID.forEach((it) => { avoid[it.key] = false; });
+
+  const inspection = { optional: {} };
+  INSPECTION_GROUPS.forEach((g) => { inspection[g.key] = {}; g.items.forEach((it) => { inspection[g.key][it.key] = false; }); });
+  OPTIONAL_INSPECTIONS.forEach((it) => { inspection.optional[it.key] = false; });
+
+  const contractChecklist = {}; CONTRACT_CHECKLIST.forEach((it) => { contractChecklist[it.key] = false; });
+  const constructionChecklist = {}; CONSTRUCTION_ORDER.forEach((it) => { constructionChecklist[it.key] = false; });
+  const marketPrepChecklist = {}; MARKET_PREP_CHECKLIST.forEach((it) => { marketPrepChecklist[it.key] = false; });
+  const review = {}; REVIEW_CHECKLIST.forEach((it) => { review[it.key] = false; });
+
+  return {
+    id: 'deal_' + Math.random().toString(36).slice(2, 10),
+    address: '',
+    currentStep: 1,
+    arv: 0,
+    salePrice: 0,
+    listPrice: 0,
+    listDate: '',
+    saleDate: '',
+    purchaseDate: '',
+    contractDate: '',
+    offerAmount: 0,
+    maxOfferPct: 70,
+    prelim: { arv: 0, repairs: 0, asking: 0 },
+    sourcing: { lookFor, avoid },
+    inspection,
+    costs: { acquisition, repair, holding, selling },
+    extra: [],
+    comps: [],
+    financing: { type: '', source: '', loanAmount: 0, rate: 0, points: 0, secured: false },
+    contractChecklist,
+    constructionChecklist,
+    marketPrepChecklist,
+    review,
+    reviewNotes: '',
+    notes: '',
+    files: { inspection: [], financing: [], contract: [], construction: [], listing: [], sale: [] },
+  };
+}
+
+function normalizeDeal(d) {
+  const blank = blankDeal();
+  if (!d || typeof d !== 'object') return blank;
+  const merged = { ...blank, ...d };
+
+  merged.prelim = { ...blank.prelim, ...(d.prelim || {}) };
+
+  merged.sourcing = {
+    lookFor: { ...blank.sourcing.lookFor, ...((d.sourcing && d.sourcing.lookFor) || {}) },
+    avoid: { ...blank.sourcing.avoid, ...((d.sourcing && d.sourcing.avoid) || {}) },
+  };
+
+  merged.inspection = {};
+  Object.keys(blank.inspection).forEach((k) => {
+    merged.inspection[k] = { ...blank.inspection[k], ...((d.inspection && d.inspection[k]) || {}) };
+  });
+
+  merged.costs = {
+    acquisition: { ...blank.costs.acquisition, ...((d.costs && d.costs.acquisition) || {}) },
+    holding: { ...blank.costs.holding, ...((d.costs && d.costs.holding) || {}) },
+    selling: { ...blank.costs.selling, ...((d.costs && d.costs.selling) || {}) },
+    repair: {},
+  };
+  Object.keys(blank.costs.repair).forEach((k) => {
+    merged.costs.repair[k] = { ...blank.costs.repair[k], ...((d.costs && d.costs.repair && d.costs.repair[k]) || {}) };
+  });
+
+  merged.financing = { ...blank.financing, ...(d.financing || {}) };
+  merged.contractChecklist = { ...blank.contractChecklist, ...(d.contractChecklist || {}) };
+  merged.constructionChecklist = { ...blank.constructionChecklist, ...(d.constructionChecklist || {}) };
+  merged.marketPrepChecklist = { ...blank.marketPrepChecklist, ...(d.marketPrepChecklist || {}) };
+  merged.review = { ...blank.review, ...(d.review || {}) };
+  merged.files = { ...blank.files, ...(d.files || {}) };
+  merged.extra = Array.isArray(d.extra) ? d.extra : [];
+  merged.comps = Array.isArray(d.comps) ? d.comps : [];
+  merged.id = d.id || blank.id;
+
+  return merged;
+}
+
+function money(n) {
+  const v = Number(n) || 0;
+  const sign = v < 0 ? '-' : '';
+  return sign + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+}
+function getNested(obj, path) { return path.split('.').reduce((o, k) => (o ? o[k] : undefined), obj); }
+function sumItems(obj, field) { return Object.values(obj || {}).reduce((s, v) => s + (Number(v?.[field]) || 0), 0); }
+function countChecked(obj, items) { return items.filter((it) => obj && obj[it.key]).length; }
+
+function repairBudgetTotal(deal, field) {
+  let s = 0;
+  Object.values(deal.costs?.repair || {}).forEach((g) => { s += sumItems(g, field); });
+  s += (deal.extra || []).reduce((sum, e) => sum + (Number(e[field]) || 0), 0);
+  return s;
+}
+function totalCost(deal, field) {
+  return sumItems(deal.costs?.acquisition, field) + repairBudgetTotal(deal, field) + sumItems(deal.costs?.holding, field) + sumItems(deal.costs?.selling, field);
+}
+function projectedProfit(deal) { return (Number(deal.arv) || 0) - totalCost(deal, 'est'); }
+function actualProfit(deal) {
+  const sale = Number(deal.salePrice) || Number(deal.arv) || 0;
+  return sale - totalCost(deal, 'actual');
+}
+function roiPct(profit, cost) { return cost ? (profit / cost) * 100 : 0; }
+function allReviewChecked(deal) { return REVIEW_CHECKLIST.every((it) => deal.review && deal.review[it.key]); }
+function deltaColor(est, actual, lowerIsBetter) {
+  const d = actual - est;
+  if (!d) return 'rgba(243,238,224,0.45)';
+  const bad = lowerIsBetter ? d > 0 : d < 0;
+  return bad ? 'var(--orange)' : 'var(--green)';
+}
+function stepColor(n) {
+  if (n <= 2) return 'rgba(243,238,224,0.75)';
+  if (n <= 8) return 'var(--yellow)';
+  if (n === 9 || n === 10 || n === 11) return 'var(--orange)';
+  if (n <= 14) return 'var(--yellow)';
+  return 'var(--green)';
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+          else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const c = canvas.getContext('2d');
+        c.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('image decode failed'));
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function processFiles(fileList) {
+  const files = Array.from(fileList);
+  const out = [];
+  for (const f of files) {
+    let dataUrl;
+    if (f.type && f.type.startsWith('image/')) {
+      try { dataUrl = await compressImage(f, 1100, 0.65); } catch (e) { dataUrl = await readAsDataURL(f); }
+    } else {
+      dataUrl = await readAsDataURL(f);
+    }
+    out.push({ id: 'f_' + Math.random().toString(36).slice(2, 9), name: f.name, type: f.type || '', size: dataUrl.length, dataUrl, addedAt: new Date().toISOString() });
+  }
+  return out;
+}
+
+function stepSummary(n, deal) {
+  switch (n) {
+    case 1: { const lf = countChecked(deal.sourcing.lookFor, LOOK_FOR); const av = countChecked(deal.sourcing.avoid, AVOID); return `${lf} signal${lf === 1 ? '' : 's'}${av ? `, ${av} flag${av === 1 ? '' : 's'}` : ''}`; }
+    case 2: { const p = (Number(deal.prelim.arv) || 0) - (Number(deal.prelim.repairs) || 0) - (Number(deal.prelim.asking) || 0); return `quick profit ${money(p)}`; }
+    case 3: { let total = 0, checked = 0; INSPECTION_GROUPS.forEach((g) => { total += g.items.length; checked += countChecked(deal.inspection[g.key], g.items); }); return `${checked}/${total} checked`; }
+    case 4: return `${money(repairBudgetTotal(deal, 'est'))} budgeted`;
+    case 5: return `${money(sumItems(deal.costs.holding, 'est'))} budgeted`;
+    case 6: return `ARV ${money(deal.arv)} · ${(deal.comps || []).length} comps`;
+    case 7: return `max offer ${money(maxOffer(deal))}`;
+    case 8: return verifyProfitVerdict(deal).label;
+    case 9: return deal.financing.type || 'not set';
+    case 10: return `${countChecked(deal.contractChecklist, CONTRACT_CHECKLIST)}/${CONTRACT_CHECKLIST.length} confirmed`;
+    case 11: return `${countChecked(deal.constructionChecklist, CONSTRUCTION_ORDER)}/${CONSTRUCTION_ORDER.length} complete`;
+    case 12: return `${countChecked(deal.marketPrepChecklist, MARKET_PREP_CHECKLIST)}/${MARKET_PREP_CHECKLIST.length} ready`;
+    case 13: return deal.listPrice ? `listed ${money(deal.listPrice)}` : 'not listed';
+    case 14: return deal.salePrice ? `sold ${money(deal.salePrice)}` : 'not sold';
+    case 15: return allReviewChecked(deal) ? 'unlocked' : `${countChecked(deal.review, REVIEW_CHECKLIST)}/${REVIEW_CHECKLIST.length} reviewed`;
+    default: return '';
+  }
+}
+
+function maxOffer(deal) {
+  const arv = Number(deal.arv) || Number(deal.prelim.arv) || 0;
+  const repairs = repairBudgetTotal(deal, 'est') || Number(deal.prelim.repairs) || 0;
+  const pct = Number(deal.maxOfferPct) || 70;
+  return arv * (pct / 100) - repairs;
+}
+function verifyProfitVerdict(deal) {
+  const arv = Number(deal.arv) || 0;
+  const profit = projectedProfit(deal);
+  const pct = arv ? (profit / arv) * 100 : 0;
+  if (profit < 30000 && pct < 10) return { label: 'below target', color: 'var(--orange)' };
+  if (profit < 50000 || pct < 15) return { label: 'meets minimum', color: 'var(--yellow)' };
+  return { label: 'strong deal', color: 'var(--green)' };
+}
+
+/* ---------- styling ---------- */
+
+const STYLE = `
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+.fc { --navy:#15314F; --navy-deep:#0E2438; --chalk:#F3EEE0; --yellow:#F2B705; --orange:#E8590C; --green:#2F8F5B;
+  font-family:'IBM Plex Sans', sans-serif; color:var(--chalk); background:var(--navy); min-height:100vh; }
+.fc .font-display{ font-family:'Anton', sans-serif; letter-spacing:0.03em; }
+.fc .font-mono{ font-family:'IBM Plex Mono', monospace; }
+.fc-grid-bg{ background-image: linear-gradient(rgba(243,238,224,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(243,238,224,0.05) 1px, transparent 1px); background-size:24px 24px; }
+.fc-text-10{ font-size:10px; }
+.fc-text-11{ font-size:11px; }
+.fc-card{ background:var(--navy-deep); border:1px solid rgba(243,238,224,0.12); border-radius:4px; transition: transform .15s ease, border-color .15s ease; cursor:pointer; }
+.fc-card:hover{ border-color:var(--yellow); transform: translateY(-2px); }
+.fc-input{ background:transparent; border:none; border-bottom:1px solid rgba(243,238,224,0.25); color:var(--chalk); font-family:'IBM Plex Mono', monospace; text-align:right; padding:3px 2px; width:100%; }
+.fc-input:focus{ outline:none; border-bottom-color:var(--yellow); }
+.fc-input::-webkit-outer-spin-button, .fc-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+.fc-text{ background:transparent; border:none; border-bottom:1px solid rgba(243,238,224,0.25); color:var(--chalk); padding:4px 2px; width:100%; }
+.fc-text:focus{ outline:none; border-bottom-color:var(--yellow); }
+.fc-stamp{ display:inline-flex; align-items:center; justify-content:center; border:2px solid currentColor; border-radius:9999px; padding:3px 12px; font-family:'Bebas Neue', sans-serif; letter-spacing:0.08em; transform:rotate(-6deg); font-size:0.7rem; white-space:nowrap; }
+.fc-tape{ position:relative; height:1.5rem; border-radius:2px; background:rgba(243,238,224,0.08); overflow:hidden; background-image:repeating-linear-gradient(90deg, rgba(243,238,224,0.2) 0 1px, transparent 1px 8px); }
+.fc-tape-fill{ position:absolute; top:0; left:0; bottom:0; background:var(--yellow); opacity:0.85; transition:width .3s ease; }
+.fc-btn{ font-family:'IBM Plex Mono', monospace; font-size:0.72rem; letter-spacing:0.04em; text-transform:uppercase; border:1px solid rgba(243,238,224,0.3); background:transparent; color:var(--chalk); padding:7px 14px; border-radius:3px; cursor:pointer; transition:all .15s ease; }
+.fc-btn:hover{ border-color:var(--yellow); color:var(--yellow); }
+.fc-btn-primary{ background:var(--yellow); color:var(--navy-deep); border-color:var(--yellow); font-weight:700; }
+.fc-btn-primary:hover{ opacity:0.88; color:var(--navy-deep); }
+.fc-pick{ font-family:'IBM Plex Mono', monospace; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.04em; padding:7px 11px; border-radius:3px; border:1px solid rgba(243,238,224,0.25); background:transparent; color:rgba(243,238,224,0.6); cursor:pointer; }
+.fc-pick.active{ background:var(--yellow); color:var(--navy-deep); border-color:var(--yellow); font-weight:700; }
+.fc-row + .fc-row{ border-top:1px solid rgba(243,238,224,0.08); }
+.fc-chip{ font-family:'IBM Plex Mono', monospace; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.04em; border:1px solid rgba(243,238,224,0.25); border-radius:3px; padding:4px 8px; color:rgba(243,238,224,0.7); display:inline-block; }
+.fc-grid-ledger{ display:grid; grid-template-columns: 1fr 90px 90px 64px; gap:8px; }
+@media (max-width:480px){ .fc-grid-ledger{ grid-template-columns:1fr 64px 64px 44px; gap:4px; } .fc-input{ font-size:11px; } }
+.fc-checkbox-row{ display:flex; align-items:center; gap:8px; padding:4px 0; font-size:0.82rem; cursor:pointer; }
+.fc-checkbox{ width:15px; height:15px; accent-color:var(--yellow); cursor:pointer; flex-shrink:0; }
+.fc-checklist-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+@media (max-width:480px){ .fc-checklist-grid{ grid-template-columns:1fr; } }
+.fc-step{ border:1px solid rgba(243,238,224,0.15); border-radius:4px; margin-bottom:10px; overflow:hidden; }
+.fc-step-header{ display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer; background:rgba(243,238,224,0.03); }
+.fc-step-header:hover{ background:rgba(243,238,224,0.06); }
+.fc-step-num{ width:26px; height:26px; border-radius:9999px; border:1.5px solid rgba(243,238,224,0.35); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:0.68rem; flex-shrink:0; }
+.fc-step-num.current{ border-color:var(--yellow); color:var(--yellow); }
+.fc-step-num.past{ background:var(--green); border-color:var(--green); color:var(--navy-deep); }
+.fc-step-body{ padding:16px 16px 18px; border-top:1px solid rgba(243,238,224,0.1); }
+.fc-group-header{ display:flex; align-items:center; justify-content:space-between; padding:8px 2px; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; opacity:0.8; }
+.fc-locked{ position:relative; }
+.fc-locked-overlay{ display:flex; align-items:center; gap:8px; padding:14px; border:1px dashed rgba(243,238,224,0.3); border-radius:4px; color:rgba(243,238,224,0.55); font-size:0.8rem; }
+.fc-progress-chip{ font-family:'IBM Plex Mono',monospace; font-size:0.62rem; opacity:0.55; flex-shrink:0; white-space:nowrap; }
+.fc-field-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.5; margin-bottom:4px; }
+.fc-comp{ border:1px solid rgba(243,238,224,0.12); border-radius:4px; padding:12px; margin-bottom:8px; }
+`;
+
+/* ---------- reusable pieces ---------- */
+
+function ChecklistGroup({ basePath, items, deal, setField, columns, label, selectAll, selectAllLabel }) {
+  const obj = getNested(deal, basePath) || {};
+  const allChecked = items.length > 0 && items.every((it) => obj[it.key]);
+  const toggleAll = () => {
+    const newObj = {};
+    items.forEach((it) => { newObj[it.key] = !allChecked; });
+    setField(deal.id, basePath, newObj);
+  };
+  return (
+    <div>
+      {label && (
+        <div className="fc-field-label flex items-center justify-between" style={{ marginBottom: '6px' }}>
+          <span>{label}</span>
+          {selectAll && (
+            <label className="flex items-center gap-1" style={{ cursor: 'pointer', textTransform: 'none', letterSpacing: 0, opacity: 0.75 }}>
+              <input type="checkbox" className="fc-checkbox" checked={allChecked} onChange={toggleAll} />
+              <span>{selectAllLabel || 'select all'}</span>
+            </label>
+          )}
+        </div>
+      )}
+      <div className={columns ? 'fc-checklist-grid' : ''}>
+        {items.map((it) => (
+          <label key={it.key} className="fc-checkbox-row">
+            <input type="checkbox" className="fc-checkbox" checked={!!obj[it.key]} onChange={(e) => setField(deal.id, `${basePath}.${it.key}`, e.target.checked)} />
+            <span style={{ opacity: obj[it.key] ? 0.5 : 1, textDecoration: obj[it.key] ? 'line-through' : 'none' }}>{it.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CostGroup({ basePath, items, label, deal, setField, startOpen }) {
+  const [open, setOpen] = useState(!!startOpen);
+  const groupObj = getNested(deal, basePath) || {};
+  const estSum = sumItems(groupObj, 'est');
+  const actSum = sumItems(groupObj, 'actual');
+  return (
+    <div className="mb-1">
+      <div className="fc-group-header" onClick={() => setOpen(!open)}>
+        <span>{open ? '▾' : '▸'} {label}</span>
+        <span className="font-mono">{money(estSum)} / {money(actSum)}</span>
+      </div>
+      {open && items.map((it) => {
+        const itemPath = `${basePath}.${it.key}`;
+        const itemObj = groupObj[it.key] || { est: 0, actual: 0 };
+        return (
+          <div key={it.key} className="fc-row fc-grid-ledger py-2 items-center">
+            <span className="text-sm">{it.label}</span>
+            <input type="number" className="fc-input" value={itemObj.est} onChange={(e) => setField(deal.id, `${itemPath}.est`, parseFloat(e.target.value) || 0)} />
+            <input type="number" className="fc-input" value={itemObj.actual} onChange={(e) => setField(deal.id, `${itemPath}.actual`, parseFloat(e.target.value) || 0)} />
+            <span className="font-mono fc-text-11" style={{ textAlign: 'right', color: deltaColor(itemObj.est, itemObj.actual, true) }}>
+              {itemObj.actual - itemObj.est >= 0 ? '+' : ''}{money(itemObj.actual - itemObj.est)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompCard({ comp, onChange, onRemove }) {
+  return (
+    <div className="fc-comp">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <input className="fc-text text-sm" style={{ textAlign: 'left' }} placeholder="Comp address" value={comp.address} onChange={(e) => onChange('address', e.target.value)} />
+        <button onClick={onRemove} style={{ background: 'none', border: 'none', color: 'rgba(243,238,224,0.4)', cursor: 'pointer' }}><Trash2 size={13} /></button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div><div className="fc-field-label">Sale Price</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={comp.salePrice} onChange={(e) => onChange('salePrice', parseFloat(e.target.value) || 0)} /></div>
+        <div><div className="fc-field-label">Sq Ft</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={comp.sqft} onChange={(e) => onChange('sqft', parseFloat(e.target.value) || 0)} /></div>
+        <div>
+          <div className="fc-field-label">Beds / Baths</div>
+          <div className="flex gap-1">
+            <input type="number" className="fc-input" style={{ textAlign: 'left' }} value={comp.beds} onChange={(e) => onChange('beds', parseFloat(e.target.value) || 0)} />
+            <input type="number" className="fc-input" style={{ textAlign: 'left' }} value={comp.baths} onChange={(e) => onChange('baths', parseFloat(e.target.value) || 0)} />
+          </div>
+        </div>
+        <div>
+          <div className="fc-field-label">Finish Level</div>
+          <select className="fc-text" value={comp.finish} onChange={(e) => onChange('finish', e.target.value)} style={{ color: 'var(--chalk)' }}>
+            <option value="standard">Standard</option>
+            <option value="updated">Updated</option>
+            <option value="high-end">High-end</option>
+          </select>
+        </div>
+        <div><div className="fc-field-label">Sale Date</div><input type="date" className="fc-text" style={{ colorScheme: 'dark' }} value={comp.saleDate} onChange={(e) => onChange('saleDate', e.target.value)} /></div>
+      </div>
+    </div>
+  );
+}
+
+function FileCard({ file: f, onRemove }) {
+  const isImg = f.type && f.type.startsWith('image/');
+  return (
+    <div style={{ position: 'relative', border: '1px solid rgba(243,238,224,0.15)', borderRadius: '4px', overflow: 'hidden', background: 'rgba(243,238,224,0.03)' }}>
+      {isImg ? (
+        <img src={f.dataUrl} alt={f.name} style={{ width: '100%', height: '78px', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <div style={{ height: '78px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <FileText size={24} style={{ opacity: 0.45 }} />
+        </div>
+      )}
+      <a href={f.dataUrl} download={f.name} className="fc-text-11" style={{ display: 'block', padding: '4px 6px', color: 'var(--chalk)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'rgba(14,36,56,0.55)' }}>{f.name}</a>
+      <button onClick={onRemove} style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(14,36,56,0.85)', border: 'none', borderRadius: '9999px', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--chalk)' }}>
+        <Trash2 size={10} />
+      </button>
+    </div>
+  );
+}
+
+function FileSection({ basePath, deal, setField, label, accept, allowCamera }) {
+  const files = getNested(deal, basePath) || [];
+  const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const totalKB = Math.round(files.reduce((s, f) => s + (f.size || 0), 0) / 1024);
+
+  const addFiles = async (fileList) => {
+    if (!fileList || !fileList.length) return;
+    setBusy(true);
+    try {
+      const added = await processFiles(fileList);
+      setField(deal.id, basePath, [...(getNested(deal, basePath) || []), ...added]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeFile = (id) => {
+    setField(deal.id, basePath, files.filter((f) => f.id !== id));
+  };
+
+  return (
+    <div className="mt-5">
+      <div className="fc-field-label flex items-center justify-between">
+        <span>{label}</span>
+        <span className="opacity-40">{totalKB} KB</span>
+      </div>
+      <div className="flex flex-wrap gap-2 mb-3 mt-1">
+        {allowCamera && (
+          <>
+            <button type="button" className="fc-btn flex items-center gap-1" onClick={() => cameraInputRef.current && cameraInputRef.current.click()} disabled={busy}>
+              <Camera size={13} /> Take Picture
+            </button>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          </>
+        )}
+        <button type="button" className="fc-btn flex items-center gap-1" onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={busy}>
+          <Upload size={13} /> Upload Manually
+        </button>
+        <input ref={fileInputRef} type="file" accept={accept} multiple style={{ display: 'none' }} onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+        {busy && <span className="fc-text-11 opacity-50 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> processing</span>}
+      </div>
+      {files.length === 0 ? (
+        <p className="fc-text-11 opacity-30">No files yet.</p>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+          {files.map((f) => (
+            <FileCard key={f.id} file={f} onRemove={() => removeFile(f.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- step bodies ---------- */
+
+function getStepBody(n, deal, ctx) {
+  const { setField, addExtra, removeExtra, addComp, removeComp, updateComp } = ctx;
+  switch (n) {
+    case 1: {
+      const avoidCount = countChecked(deal.sourcing.avoid, AVOID);
+      return (
+        <div>
+          <div className="fc-field-label">Look For</div>
+          <ChecklistGroup basePath="sourcing.lookFor" items={LOOK_FOR} deal={deal} setField={setField} columns />
+          <div className="fc-field-label mt-5">Avoid</div>
+          <ChecklistGroup basePath="sourcing.avoid" items={AVOID} deal={deal} setField={setField} columns />
+          {avoidCount > 0 && <div className="mt-3 fc-text-11" style={{ color: 'var(--orange)' }}>⚠ {avoidCount} red flag{avoidCount > 1 ? 's' : ''} checked — proceed with caution.</div>}
+        </div>
+      );
+    }
+    case 2: {
+      const profit = (Number(deal.prelim.arv) || 0) - (Number(deal.prelim.repairs) || 0) - (Number(deal.prelim.asking) || 0);
+      return (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div><div className="fc-field-label">Rough ARV</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.prelim.arv} onChange={(e) => setField(deal.id, 'prelim.arv', parseFloat(e.target.value) || 0)} /></div>
+            <div><div className="fc-field-label">Rough Repair Estimate</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.prelim.repairs} onChange={(e) => setField(deal.id, 'prelim.repairs', parseFloat(e.target.value) || 0)} /></div>
+            <div><div className="fc-field-label">Rough Asking Price</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.prelim.asking} onChange={(e) => setField(deal.id, 'prelim.asking', parseFloat(e.target.value) || 0)} /></div>
+          </div>
+          <div className="mt-5 p-4" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+            <div className="fc-field-label">Expected Profit (quick calc)</div>
+            <div className="font-mono text-2xl mt-1" style={{ color: profit >= 20000 ? 'var(--green)' : 'var(--orange)' }}>{money(profit)}</div>
+            <div className="fc-text-11 opacity-50 mt-1">{profit >= 20000 ? 'Looks promising — worth pursuing further.' : "Doesn't pencil at a high level — consider passing."}</div>
+          </div>
+        </div>
+      );
+    }
+    case 3: {
+      return (
+        <div>
+          {INSPECTION_GROUPS.map((g) => (
+            <div key={g.key} className="mb-4">
+              <ChecklistGroup basePath={`inspection.${g.key}`} items={g.items} deal={deal} setField={setField} columns label={g.label} selectAll selectAllLabel="all inspected" />
+            </div>
+          ))}
+          <div className="mb-2">
+            <ChecklistGroup basePath="inspection.optional" items={OPTIONAL_INSPECTIONS} deal={deal} setField={setField} columns label="Optional" selectAll selectAllLabel="all inspected" />
+          </div>
+          <FileSection basePath="files.inspection" deal={deal} setField={setField} label="Inspection Photos" accept="image/*" allowCamera />
+        </div>
+      );
+    }
+    case 4: {
+      const estTotal = repairBudgetTotal(deal, 'est');
+      const actTotal = repairBudgetTotal(deal, 'actual');
+      return (
+        <div>
+          {REPAIR_BUDGET_GROUPS.map((g) => (
+            <CostGroup key={g.key} basePath={`costs.repair.${g.key}`} items={g.items} label={g.label} deal={deal} setField={setField} />
+          ))}
+          <div className="fc-group-header"><span>Custom Items</span><span></span></div>
+          {(deal.extra || []).map((ex) => (
+            <div key={ex.id} className="fc-row fc-grid-ledger py-2 items-center">
+              <input className="fc-text text-sm" style={{ textAlign: 'left' }} value={ex.name} onChange={(e) => setField(deal.id, 'extra', deal.extra.map((x) => (x.id === ex.id ? { ...x, name: e.target.value } : x)))} />
+              <input type="number" className="fc-input" value={ex.est} onChange={(e) => setField(deal.id, 'extra', deal.extra.map((x) => (x.id === ex.id ? { ...x, est: parseFloat(e.target.value) || 0 } : x)))} />
+              <input type="number" className="fc-input" value={ex.actual} onChange={(e) => setField(deal.id, 'extra', deal.extra.map((x) => (x.id === ex.id ? { ...x, actual: parseFloat(e.target.value) || 0 } : x)))} />
+              <div className="flex items-center justify-end gap-1">
+                <span className="font-mono fc-text-11" style={{ color: deltaColor(ex.est, ex.actual, true) }}>{ex.actual - ex.est >= 0 ? '+' : ''}{money(ex.actual - ex.est)}</span>
+                <button onClick={() => removeExtra(deal.id, ex.id)} style={{ background: 'none', border: 'none', color: 'rgba(243,238,224,0.4)', cursor: 'pointer' }}><Trash2 size={12} /></button>
+              </div>
+            </div>
+          ))}
+          <button className="font-mono fc-text-11 flex items-center gap-1 mt-2" style={{ background: 'none', border: 'none', color: 'var(--yellow)', cursor: 'pointer' }} onClick={() => addExtra(deal.id)}><Plus size={12} /> add custom item</button>
+          <div className="fc-grid-ledger py-3 mt-3 font-mono text-sm font-semibold" style={{ borderTop: '1px solid rgba(243,238,224,0.25)' }}>
+            <span>Repair Budget Total</span>
+            <span style={{ textAlign: 'right' }}>{money(estTotal)}</span>
+            <span style={{ textAlign: 'right' }}>{money(actTotal)}</span>
+            <span style={{ textAlign: 'right', color: deltaColor(estTotal, actTotal, true) }}>{actTotal - estTotal >= 0 ? '+' : ''}{money(actTotal - estTotal)}</span>
+          </div>
+        </div>
+      );
+    }
+    case 5: {
+      const estTotal = sumItems(deal.costs.holding, 'est');
+      const actTotal = sumItems(deal.costs.holding, 'actual');
+      return (
+        <div>
+          <CostGroup basePath="costs.holding" items={HOLDING_ITEMS} label="Holding Costs" deal={deal} setField={setField} startOpen />
+          <div className="fc-grid-ledger py-3 mt-2 font-mono text-sm font-semibold" style={{ borderTop: '1px solid rgba(243,238,224,0.25)' }}>
+            <span>Holding Total</span>
+            <span style={{ textAlign: 'right' }}>{money(estTotal)}</span>
+            <span style={{ textAlign: 'right' }}>{money(actTotal)}</span>
+            <span style={{ textAlign: 'right', color: deltaColor(estTotal, actTotal, true) }}>{actTotal - estTotal >= 0 ? '+' : ''}{money(actTotal - estTotal)}</span>
+          </div>
+        </div>
+      );
+    }
+    case 6: {
+      return (
+        <div>
+          {(deal.comps || []).map((c) => (
+            <CompCard key={c.id} comp={c} onChange={(field, val) => updateComp(deal.id, c.id, field, val)} onRemove={() => removeComp(deal.id, c.id)} />
+          ))}
+          <button className="font-mono fc-text-11 flex items-center gap-1 mb-5" style={{ background: 'none', border: 'none', color: 'var(--yellow)', cursor: 'pointer' }} onClick={() => addComp(deal.id)}><Plus size={12} /> add sold comp</button>
+          <div className="fc-text-11 opacity-50 mb-3">Use sold comps only — similar square footage, bed/bath count, and finish level. Never use active listings.</div>
+          <div className="max-w-xs">
+            <div className="fc-field-label">Concluded ARV</div>
+            <input type="number" className="fc-input" style={{ textAlign: 'left', fontSize: '1.1rem' }} value={deal.arv} onChange={(e) => setField(deal.id, 'arv', parseFloat(e.target.value) || 0)} />
+          </div>
+        </div>
+      );
+    }
+    case 7: {
+      const arv = Number(deal.arv) || Number(deal.prelim.arv) || 0;
+      const repairs = repairBudgetTotal(deal, 'est') || Number(deal.prelim.repairs) || 0;
+      const pct = Number(deal.maxOfferPct) || 70;
+      const mo = arv * (pct / 100) - repairs;
+      return (
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="fc-text-11 opacity-60">Rule %:</span>
+            <input type="number" className="fc-input" style={{ width: '70px', textAlign: 'left' }} value={deal.maxOfferPct} onChange={(e) => setField(deal.id, 'maxOfferPct', parseFloat(e.target.value) || 70)} />
+          </div>
+          <div className="font-mono text-sm opacity-70 space-y-1">
+            <div>{money(arv)} × {pct}% = {money(arv * (pct / 100))}</div>
+            <div>{money(arv * (pct / 100))} − {money(repairs)} repairs = </div>
+          </div>
+          <div className="mt-3 p-4" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+            <div className="fc-field-label">Maximum Offer</div>
+            <div className="font-mono text-3xl mt-1" style={{ color: 'var(--yellow)' }}>{money(mo)}</div>
+          </div>
+        </div>
+      );
+    }
+    case 8: {
+      const arv = Number(deal.arv) || 0;
+      const profit = projectedProfit(deal);
+      const pct = arv ? (profit / arv) * 100 : 0;
+      const verdict = verifyProfitVerdict(deal);
+      return (
+        <div>
+          <div className="p-4" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+            <div className="fc-field-label">Projected Profit</div>
+            <div className="font-mono text-2xl mt-1" style={{ color: profit >= 0 ? 'var(--green)' : 'var(--orange)' }}>{money(profit)}</div>
+            <div className="fc-text-11 opacity-60 mt-1">{pct.toFixed(1)}% of ARV</div>
+            <div className="fc-stamp mt-3" style={{ color: verdict.color }}>{verdict.label.toUpperCase()}</div>
+          </div>
+          <div className="fc-text-11 opacity-50 mt-3">Target: minimum $30,000–$50,000, preferred 10%–20% of ARV.</div>
+        </div>
+      );
+    }
+    case 9: {
+      const types = ['Cash', 'Hard money', 'Private money', 'Commercial financing'];
+      return (
+        <div>
+          <div className="fc-field-label">Financing Type</div>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {types.map((t) => (
+              <button key={t} className={'fc-pick' + (deal.financing.type === t ? ' active' : '')} onClick={() => setField(deal.id, 'financing.type', t)}>{t}</button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><div className="fc-field-label">Lender / Source</div><input className="fc-text" style={{ textAlign: 'left' }} value={deal.financing.source} onChange={(e) => setField(deal.id, 'financing.source', e.target.value)} /></div>
+            <div><div className="fc-field-label">Loan Amount</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.financing.loanAmount} onChange={(e) => setField(deal.id, 'financing.loanAmount', parseFloat(e.target.value) || 0)} /></div>
+            <div><div className="fc-field-label">Interest Rate %</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.financing.rate} onChange={(e) => setField(deal.id, 'financing.rate', parseFloat(e.target.value) || 0)} /></div>
+            <div><div className="fc-field-label">Points</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.financing.points} onChange={(e) => setField(deal.id, 'financing.points', parseFloat(e.target.value) || 0)} /></div>
+          </div>
+          <label className="fc-checkbox-row mt-3">
+            <input type="checkbox" className="fc-checkbox" checked={!!deal.financing.secured} onChange={(e) => setField(deal.id, 'financing.secured', e.target.checked)} />
+            <span>Financing secured</span>
+          </label>
+          <FileSection basePath="files.financing" deal={deal} setField={setField} label="Financing Paperwork" accept="image/*,.pdf,.doc,.docx" allowCamera />
+        </div>
+      );
+    }
+    case 10: {
+      return (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div><div className="fc-field-label">Contract Date</div><input type="date" className="fc-text" style={{ colorScheme: 'dark' }} value={deal.contractDate} onChange={(e) => setField(deal.id, 'contractDate', e.target.value)} /></div>
+            <div><div className="fc-field-label">Offer Amount</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.offerAmount} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setField(deal.id, 'offerAmount', v); setField(deal.id, 'costs.acquisition.purchasePrice.est', v); }} /></div>
+          </div>
+          <CostGroup basePath="costs.acquisition" items={ACQUISITION_ITEMS} label="Acquisition Costs" deal={deal} setField={setField} startOpen />
+          <div className="fc-field-label mt-4">During Contract Period</div>
+          <ChecklistGroup basePath="contractChecklist" items={CONTRACT_CHECKLIST} deal={deal} setField={setField} columns />
+          <div className="fc-text-11 opacity-50 mt-4">If the numbers don't work, exit using the inspection contingency or due diligence period.</div>
+          <FileSection basePath="files.contract" deal={deal} setField={setField} label="Contract Paperwork" accept="image/*,.pdf,.doc,.docx" allowCamera />
+        </div>
+      );
+    }
+    case 11: {
+      const done = countChecked(deal.constructionChecklist, CONSTRUCTION_ORDER);
+      return (
+        <div>
+          <div className="fc-tape mb-4"><div className="fc-tape-fill" style={{ width: `${(done / CONSTRUCTION_ORDER.length) * 100}%` }} /></div>
+          <ChecklistGroup basePath="constructionChecklist" items={CONSTRUCTION_ORDER} deal={deal} setField={setField} columns />
+          <FileSection basePath="files.construction" deal={deal} setField={setField} label="Documents & Photos" accept="image/*,.pdf,.doc,.docx" allowCamera />
+        </div>
+      );
+    }
+    case 12: {
+      return <ChecklistGroup basePath="marketPrepChecklist" items={MARKET_PREP_CHECKLIST} deal={deal} setField={setField} columns />;
+    }
+    case 13: {
+      return (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><div className="fc-field-label">List Price</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.listPrice} onChange={(e) => setField(deal.id, 'listPrice', parseFloat(e.target.value) || 0)} /></div>
+            <div><div className="fc-field-label">List Date</div><input type="date" className="fc-text" style={{ colorScheme: 'dark' }} value={deal.listDate} onChange={(e) => setField(deal.id, 'listDate', e.target.value)} /></div>
+          </div>
+          <div className="fc-text-11 opacity-50 mt-3">Price using sold comps — not active listings.</div>
+          <FileSection basePath="files.listing" deal={deal} setField={setField} label="Listing Photos" accept="image/*" allowCamera />
+        </div>
+      );
+    }
+    case 14: {
+      const dom = deal.listDate && deal.saleDate ? Math.max(0, Math.round((new Date(deal.saleDate) - new Date(deal.listDate)) / 86400000)) : null;
+      const sellTotal = sumItems(deal.costs.selling, 'actual');
+      const netProceeds = (Number(deal.salePrice) || 0) - sellTotal;
+      return (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div><div className="fc-field-label">Sale Price</div><input type="number" className="fc-input" style={{ textAlign: 'left' }} value={deal.salePrice} onChange={(e) => setField(deal.id, 'salePrice', parseFloat(e.target.value) || 0)} /></div>
+            <div><div className="fc-field-label">Sale Date</div><input type="date" className="fc-text" style={{ colorScheme: 'dark' }} value={deal.saleDate} onChange={(e) => setField(deal.id, 'saleDate', e.target.value)} /></div>
+          </div>
+          <CostGroup basePath="costs.selling" items={SELLING_ITEMS} label="Selling Costs" deal={deal} setField={setField} startOpen />
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="p-3" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+              <div className="fc-field-label">Days on Market</div>
+              <div className="font-mono text-xl mt-1">{dom === null ? '—' : dom}</div>
+            </div>
+            <div className="p-3" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+              <div className="fc-field-label">Net Proceeds</div>
+              <div className="font-mono text-xl mt-1" style={{ color: netProceeds >= 0 ? 'var(--green)' : 'var(--orange)' }}>{money(netProceeds)}</div>
+            </div>
+          </div>
+          <FileSection basePath="files.sale" deal={deal} setField={setField} label="Closing Documents" accept="image/*,.pdf,.doc,.docx" allowCamera />
+        </div>
+      );
+    }
+    case 15: {
+      const unlocked = allReviewChecked(deal);
+      const aProfit = actualProfit(deal);
+      const aTotal = totalCost(deal, 'actual');
+      const aROI = roiPct(aProfit, aTotal);
+      return (
+        <div>
+          <div className="fc-field-label">Review</div>
+          <ChecklistGroup basePath="review" items={REVIEW_CHECKLIST} deal={deal} setField={setField} columns />
+          <div className="mt-3">
+            <div className="fc-field-label">Notes</div>
+            <textarea className="fc-text" style={{ textAlign: 'left', minHeight: '70px', width: '100%' }} value={deal.reviewNotes} onChange={(e) => setField(deal.id, 'reviewNotes', e.target.value)} placeholder="ARV accuracy, budget accuracy, timeline accuracy, contractor performance..." />
+          </div>
+          <div className="mt-5">
+            {unlocked ? (
+              <div className="p-4" style={{ border: '1px solid var(--green)' }}>
+                <div className="fc-field-label">Final Profit</div>
+                <div className="font-mono text-3xl mt-1" style={{ color: aProfit >= 0 ? 'var(--green)' : 'var(--orange)' }}>{money(aProfit)}</div>
+                <div className="fc-text-11 opacity-60 mt-1">ROI {aROI.toFixed(1)}%</div>
+                <div className="fc-stamp mt-3" style={{ color: 'var(--green)' }}>FLIP COMPLETE</div>
+              </div>
+            ) : (
+              <div className="fc-locked-overlay">
+                <Lock size={16} />
+                <span>Complete the review checklist above to unlock the final profit figure.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    default: return null;
+  }
+}
+
+/* ---------- main component ---------- */
+
+function DealCard({ deal: d, onOpen, isConfirmingDelete, onRequestDelete, onConfirmDelete, onCancelDelete }) {
+  const step = d.currentStep || 1;
+  const isSold = step >= 14 && d.salePrice;
+  const cost = totalCost(d, isSold ? 'actual' : 'est');
+  const profit = isSold ? actualProfit(d) : projectedProfit(d);
+  return (
+    <div className="fc-card p-4" onClick={onOpen}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold leading-snug">{d.address || 'Untitled property'}</h3>
+        {isConfirmingDelete ? (
+          <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button onClick={onConfirmDelete} className="font-mono fc-text-11" style={{ background: 'none', border: 'none', color: 'var(--orange)', cursor: 'pointer', textDecoration: 'underline' }}>delete</button>
+            <button onClick={onCancelDelete} className="font-mono fc-text-11" style={{ background: 'none', border: 'none', color: 'rgba(243,238,224,0.5)', cursor: 'pointer' }}>cancel</button>
+          </div>
+        ) : (
+          <button onClick={(e) => { e.stopPropagation(); onRequestDelete(); }} style={{ background: 'none', border: 'none', color: 'rgba(243,238,224,0.4)', cursor: 'pointer' }}>
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+      <div className="fc-tape mt-3">
+        <div className="fc-tape-fill" style={{ width: `${(step / 15) * 100}%` }} />
+      </div>
+      <div className="grid grid-cols-3 gap-1 mt-3 font-mono fc-text-11">
+        <div><div className="opacity-50">Cost</div><div>{money(cost)}</div></div>
+        <div><div className="opacity-50">{isSold ? 'Sale' : 'ARV'}</div><div>{money(isSold ? d.salePrice : d.arv)}</div></div>
+        <div><div className="opacity-50">Profit</div><div style={{ color: profit >= 0 ? 'var(--green)' : 'var(--orange)' }}>{money(profit)}</div></div>
+      </div>
+    </div>
+  );
+}
+
+export default function FlipCRM() {
+  const [deals, setDeals] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saveState, setSaveState] = useState('idle');
+  const [view, setView] = useState('overview');
+  const [activeId, setActiveId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await window.storage.get(STORAGE_KEY, false);
+        if (mounted) setDeals(res ? JSON.parse(res.value).map(normalizeDeal) : []);
+      } catch (e) {
+        if (mounted) setDeals([]);
+      } finally {
+        if (mounted) setLoaded(true);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setSaveState('saving');
+    const t = setTimeout(async () => {
+      try {
+        await window.storage.set(STORAGE_KEY, JSON.stringify(deals), false);
+        setSaveState('saved');
+      } catch (e) {
+        setSaveState('error');
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [deals, loaded]);
+
+  const updateDeal = useCallback((id, updater) => {
+    setDeals((prev) => prev.map((d) => (d.id === id ? updater(d) : d)));
+  }, []);
+
+  const setField = useCallback((id, path, value) => {
+    updateDeal(id, (d) => {
+      const copy = JSON.parse(JSON.stringify(d));
+      const keys = path.split('.');
+      let obj = copy;
+      for (let i = 0; i < keys.length - 1; i++) obj = obj[keys[i]];
+      obj[keys[keys.length - 1]] = value;
+      return copy;
+    });
+  }, [updateDeal]);
+
+  const addDeal = () => {
+    const d = blankDeal();
+    setDeals((prev) => [d, ...prev]);
+    setActiveId(d.id);
+    setView('detail');
+  };
+
+  const deleteDeal = (id) => {
+    setDeals((prev) => prev.filter((d) => d.id !== id));
+    setActiveId((cur) => (cur === id ? null : cur));
+    setView((v) => (v === 'detail' ? 'overview' : v));
+  };
+
+  const addExtra = (id) => updateDeal(id, (d) => ({ ...d, extra: [...(d.extra || []), { id: 'x_' + Math.random().toString(36).slice(2, 8), name: 'New item', est: 0, actual: 0 }] }));
+  const removeExtra = (id, exId) => updateDeal(id, (d) => ({ ...d, extra: d.extra.filter((e) => e.id !== exId) }));
+
+  const addComp = (id) => updateDeal(id, (d) => ({ ...d, comps: [...(d.comps || []), { id: 'cp_' + Math.random().toString(36).slice(2, 8), address: '', salePrice: 0, sqft: 0, beds: 0, baths: 0, finish: 'standard', saleDate: '' }] }));
+  const removeComp = (id, compId) => updateDeal(id, (d) => ({ ...d, comps: (d.comps || []).filter((c) => c.id !== compId) }));
+  const updateComp = (id, compId, field, value) => updateDeal(id, (d) => ({ ...d, comps: (d.comps || []).map((c) => (c.id === compId ? { ...c, [field]: value } : c)) }));
+
+  const doClearAll = async () => {
+    setDeals([]);
+    setConfirmClearAll(false);
+    try { await window.storage.set(STORAGE_KEY, JSON.stringify([]), false); } catch (e) {}
+  };
+
+  const activeDeal = deals.find((d) => d.id === activeId);
+  const activeDeals = deals.filter((d) => (d.currentStep || 1) < 15 || !allReviewChecked(d));
+  const closedDeals = deals.filter((d) => (d.currentStep || 1) >= 15 && allReviewChecked(d));
+  const capitalDeployed = activeDeals.reduce((s, d) => s + totalCost(d, 'actual'), 0);
+  const realizedProfit = closedDeals.reduce((s, d) => s + actualProfit(d), 0);
+  const projectedProfitActive = activeDeals.reduce((s, d) => s + projectedProfit(d), 0);
+
+  if (!loaded) {
+    return (
+      <div className="fc fc-grid-bg flex items-center justify-center" style={{ minHeight: '420px' }}>
+        <style>{STYLE}</style>
+        <Loader2 className="animate-spin" size={22} style={{ color: 'var(--yellow)' }} />
+      </div>
+    );
+  }
+
+  const ctx = { setField, addExtra, removeExtra, addComp, removeComp, updateComp };
+
+  return (
+    <div className="fc fc-grid-bg" style={{ minHeight: '600px', paddingBottom: '40px' }}>
+      <style>{STYLE}</style>
+
+      <div className="px-5 sm:px-8 pt-7 pb-5" style={{ borderBottom: '1px solid rgba(243,238,224,0.12)' }}>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="font-display text-4xl sm:text-5xl" style={{ color: 'var(--yellow)', textShadow: '2px 2px 0 var(--navy-deep)' }}>Henry's Flip CRM</h1>
+            <p className="font-mono fc-text-11 tracking-widest mt-1" style={{ fontWeight: 600, opacity: 0.85 }}>Wealth By Real Estate. A dream started by Henry Bretz, Cadillac Direct, and the Boy With The Bread attending the EH party.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-mono fc-text-11 opacity-50 flex items-center gap-1">
+              {saveState === 'saving' && (<><Loader2 size={12} className="animate-spin" /> saving</>)}
+              {saveState === 'saved' && (<><Check size={12} /> saved</>)}
+              {saveState === 'error' && (<><AlertTriangle size={12} /> save failed</>)}
+            </span>
+            {view === 'detail' ? (
+              <button className="fc-btn flex items-center gap-1" onClick={() => setView('overview')}>
+                <ChevronLeft size={14} /> Back Home
+              </button>
+            ) : (
+              <button className="fc-btn fc-btn-primary flex items-center gap-1" onClick={addDeal}>
+                <Plus size={14} /> New Deal
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {view === 'overview' && (
+        <div className="px-5 sm:px-8 py-6 max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-4" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+            {[
+              ['Active Deals', activeDeals.length, null],
+              ['Capital Deployed', money(capitalDeployed), null],
+              ['Projected Profit', money(projectedProfitActive), projectedProfitActive >= 0 ? 'var(--green)' : 'var(--orange)'],
+              ['Realized Profit', money(realizedProfit), realizedProfit >= 0 ? 'var(--green)' : 'var(--orange)'],
+            ].map(([label, val, color], i) => (
+              <div key={label} className="px-4 py-3" style={{ borderLeft: i ? '1px solid rgba(243,238,224,0.15)' : 'none' }}>
+                <div className="font-mono fc-text-10 uppercase tracking-widest opacity-60">{label}</div>
+                <div className="font-mono text-xl sm:text-2xl mt-1" style={{ color: color || 'var(--chalk)' }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {deals.length === 0 ? (
+            <div className="text-center py-20">
+              <Home size={28} style={{ color: 'rgba(243,238,224,0.3)', margin: '0 auto 14px' }} />
+              <p className="opacity-70 text-sm">No deals on the books yet.</p>
+              <p className="opacity-50 text-xs mt-1 mb-5">Add your first flip to start working the framework.</p>
+              <button className="fc-btn fc-btn-primary inline-flex items-center gap-1" onClick={addDeal}><Plus size={14} /> Add First Deal</button>
+            </div>
+          ) : (
+            <div className="mt-6">
+              {STEP_DEFS.map((s) => {
+                const dealsAtStep = deals.filter((d) => (d.currentStep || 1) === s.n);
+                return (
+                  <div key={s.n} className="mb-5">
+                    <div className="flex items-center gap-2 mb-3" style={{ borderBottom: '1px solid rgba(243,238,224,0.12)', paddingBottom: '8px' }}>
+                      <span className="fc-stamp" style={{ color: dealsAtStep.length > 0 ? 'var(--yellow)' : 'var(--chalk)' }}>STEP {s.n}</span>
+                      <span className="font-mono fc-text-11 uppercase tracking-wide opacity-70">{s.title}</span>
+                      <span className="font-mono fc-text-11 opacity-35">({dealsAtStep.length})</span>
+                    </div>
+                    {dealsAtStep.length === 0 ? (
+                      <p className="fc-text-11 opacity-30 mb-1">No deals at this step.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {dealsAtStep.map((d) => (
+                          <DealCard
+                            key={d.id}
+                            deal={d}
+                            onOpen={() => { setActiveId(d.id); setView('detail'); }}
+                            isConfirmingDelete={confirmDeleteId === d.id}
+                            onRequestDelete={() => setConfirmDeleteId(d.id)}
+                            onConfirmDelete={() => { deleteDeal(d.id); setConfirmDeleteId(null); }}
+                            onCancelDelete={() => setConfirmDeleteId(null)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {deals.length > 0 && (
+            <div className="text-right mt-8">
+              {confirmClearAll ? (
+                <span className="font-mono fc-text-11">
+                  <span style={{ color: 'var(--orange)' }}>Clear everything? </span>
+                  <button onClick={doClearAll} style={{ textDecoration: 'underline', background: 'none', border: 'none', color: 'var(--orange)', cursor: 'pointer' }}>yes</button>{' '}
+                  <button onClick={() => setConfirmClearAll(false)} style={{ textDecoration: 'underline', background: 'none', border: 'none', color: 'var(--chalk)', opacity: 0.6, cursor: 'pointer' }}>cancel</button>
+                </span>
+              ) : (
+                <button className="font-mono fc-text-11 opacity-40" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--chalk)', textDecoration: 'underline' }} onClick={() => setConfirmClearAll(true)}>clear all data</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'detail' && activeDeal && (
+        <DealDetail deal={activeDeal} setField={setField} deleteDeal={deleteDeal} ctx={ctx} />
+      )}
+    </div>
+  );
+}
+
+function DealDetail({ deal, setField, deleteDeal, ctx }) {
+  const [expandedStep, setExpandedStep] = useState(deal.currentStep || 1);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  useEffect(() => { setExpandedStep(deal.currentStep || 1); }, [deal.id]);
+
+  const estTotal = totalCost(deal, 'est');
+  const actualTotal = totalCost(deal, 'actual');
+  const pProfit = projectedProfit(deal);
+  const aProfit = actualProfit(deal);
+  const pROI = roiPct(pProfit, estTotal);
+  const aROI = roiPct(aProfit, actualTotal);
+  const step = deal.currentStep || 1;
+
+  return (
+    <div className="px-5 sm:px-8 py-6 max-w-4xl mx-auto">
+      <input
+        className="fc-text font-display text-2xl"
+        style={{ textAlign: 'left' }}
+        placeholder="Property address"
+        value={deal.address}
+        onChange={(e) => setField(deal.id, 'address', e.target.value)}
+      />
+
+      <div className="fc-tape mt-4"><div className="fc-tape-fill" style={{ width: `${(step / 15) * 100}%` }} /></div>
+      <div className="fc-text-11 opacity-50 mt-1">Step {step} of 15</div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 p-4" style={{ border: '1px solid rgba(243,238,224,0.15)' }}>
+        <div><div className="fc-field-label">Est. Total Cost</div><div className="font-mono text-lg">{money(estTotal)}</div></div>
+        <div><div className="fc-field-label">Actual Total Cost</div><div className="font-mono text-lg">{money(actualTotal)}</div></div>
+        <div><div className="fc-field-label">Projected Profit</div><div className="font-mono text-lg" style={{ color: pProfit >= 0 ? 'var(--green)' : 'var(--orange)' }}>{money(pProfit)} <span className="fc-text-11 opacity-50">({pROI.toFixed(1)}%)</span></div></div>
+        <div><div className="fc-field-label">Actual Profit</div><div className="font-mono text-lg" style={{ color: aProfit >= 0 ? 'var(--green)' : 'var(--orange)' }}>{money(aProfit)} <span className="fc-text-11 opacity-50">({aROI.toFixed(1)}%)</span></div></div>
+      </div>
+
+      <div className="mt-6">
+        {STEP_DEFS.map((s) => {
+          const n = s.n;
+          const isExpanded = expandedStep === n;
+          const isCurrent = step === n;
+          const isPast = n < step;
+          return (
+            <div key={n} className="fc-step">
+              <div className="fc-step-header" onClick={() => setExpandedStep(isExpanded ? null : n)}>
+                <span className={'fc-step-num' + (isCurrent ? ' current' : '') + (isPast ? ' past' : '')}>{isPast ? '✓' : n}</span>
+                <span className="text-sm font-semibold" style={{ flex: 1 }}>{s.title}</span>
+                <span className="fc-progress-chip">{stepSummary(n, deal)}</span>
+              </div>
+              {isExpanded && (
+                <div className="fc-step-body">
+                  {getStepBody(n, deal, ctx)}
+                  {n < 15 && (
+                    <button className="fc-btn mt-5" onClick={() => { setField(deal.id, 'currentStep', n + 1); setExpandedStep(n + 1); }}>
+                      Advance to Step {n + 1} →
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-6">
+        <div className="fc-field-label">General Notes</div>
+        <textarea className="fc-text" style={{ textAlign: 'left', minHeight: '80px', width: '100%' }} value={deal.notes} onChange={(e) => setField(deal.id, 'notes', e.target.value)} placeholder="Contractor info, agent contact, anything else worth remembering..." />
+      </div>
+
+      <div className="mt-6">
+        {confirmingDelete ? (
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="fc-text-11" style={{ color: 'var(--orange)' }}>Delete this deal permanently?</span>
+            <button className="fc-btn" style={{ color: 'var(--orange)', borderColor: 'var(--orange)' }} onClick={() => deleteDeal(deal.id)}>Yes, delete</button>
+            <button className="fc-btn" onClick={() => setConfirmingDelete(false)}>Cancel</button>
+          </div>
+        ) : (
+          <button className="fc-btn flex items-center gap-1" style={{ color: 'var(--orange)', borderColor: 'var(--orange)' }} onClick={() => setConfirmingDelete(true)}>
+            <Trash2 size={13} /> Delete Deal
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
